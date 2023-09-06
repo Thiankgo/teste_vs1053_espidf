@@ -39,14 +39,31 @@
 // static const int SPI_Frequency = SPI_MASTER_FREQ_40M;
 // static const int SPI_Frequency = SPI_MASTER_FREQ_80M;
 
-void delay(int ms) {
+void VS1053_t::delay(int ms) {
   TickType_t xTicksToDelay = pdMS_TO_TICKS(ms);
-  //ESP_LOGD(TAG, "ms=%d _ms=%d portTICK_PERIOD_MS=%d xTicksToDelay=%d", ms, _ms, portTICK_PERIOD_MS, (int)xTicksToDelay);
+  // ESP_LOGD(TAG, "ms=%d _ms=%d portTICK_PERIOD_MS=%d xTicksToDelay=%d", ms, _ms, portTICK_PERIOD_MS, (int)xTicksToDelay);
   vTaskDelay(xTicksToDelay);
 }
 
-void spi_master_init(VS1053_t *dev, int GPIO_SCLK, int GPIO_MOSI, int GPIO_MISO, gpio_num_t GPIO_CS, gpio_num_t GPIO_DCS, gpio_num_t GPIO_DREQ, gpio_num_t GPIO_RESET) {
+VS1053_t::VS1053_t(uint8_t _sclk_pin, uint8_t _mosi_pin, uint8_t _miso_pin, uint8_t _cs_pin, uint8_t _dcs_pin, uint8_t _dreq_pin, uint8_t _reset_pin) {
+  sclk_pin = _sclk_pin;
+  mosi_pin = _mosi_pin;
+  miso_pin = _miso_pin;
+  cs_pin = _cs_pin;
+  dcs_pin = _dcs_pin;
+  dreq_pin = _dreq_pin;
+  reset_pin = _reset_pin;
+}
+
+void VS1053_t::begin() {
   esp_err_t ret;
+  int GPIO_SCLK = sclk_pin;
+  int GPIO_MOSI = mosi_pin;
+  int GPIO_MISO = miso_pin;
+  gpio_num_t GPIO_CS = (gpio_num_t)cs_pin;
+  gpio_num_t GPIO_DCS = (gpio_num_t)dcs_pin;
+  gpio_num_t GPIO_DREQ = (gpio_num_t)dreq_pin;
+  gpio_num_t GPIO_RESET = (gpio_num_t)reset_pin;
 
   ESP_LOGI(TAG, "GPIO_DREQ=%d", GPIO_DREQ);
 
@@ -91,7 +108,7 @@ void spi_master_init(VS1053_t *dev, int GPIO_SCLK, int GPIO_MOSI, int GPIO_MISO,
 
   // Init SPI in slow mode
   // int freq = spi_cal_clock(APB_CLK_FREQ, 1400000, 128, NULL);
-  //ESP_LOGI(TAG,"VS1053 LowFreq: %d",freq);
+  // ESP_LOGI(TAG,"VS1053 LowFreq: %d",freq);
   int freq = 3000000;
   spi_device_interface_config_t devcfg = {
       .command_bits = 8,
@@ -112,23 +129,23 @@ void spi_master_init(VS1053_t *dev, int GPIO_SCLK, int GPIO_MOSI, int GPIO_MISO,
   assert(ret == ESP_OK);
   delay(20);
 
-  dev->dreq_pin = GPIO_DREQ;
-  dev->cs_pin = GPIO_CS;
-  dev->dcs_pin = GPIO_DCS;
-  dev->reset_pin = GPIO_RESET;
-  dev->SPIHandleLow = lvsspi;
-  //printDetails(dev, "");
+  dreq_pin = GPIO_DREQ;
+  cs_pin = GPIO_CS;
+  dcs_pin = GPIO_DCS;
+  reset_pin = GPIO_RESET;
+  SPIHandleLow = lvsspi;
+  // printDetails( "");
 
   // Init SPI in high mode
   spi_device_handle_t hvsspi;
-  if (testComm(dev, false)) {
-    ESP_LOGI(TAG, "testComm(dev, false)");
+  if (testComm(false)) {
+    ESP_LOGI(TAG, "testComm( false)");
     // softReset();
     //  Switch on the analog parts
-    write_register(dev, SCI_AUDATA, 44101);  // 44.1kHz stereo
+    write_register(SCI_AUDATA, 44101);  // 44.1kHz stereo
     // The next clocksetting allows SPI clocking at 5 MHz, 4 MHz is safe then.
-    write_register(dev, SCI_CLOCKF, 6 << 12);  // Normal clock settings multiplyer 3.0 = 12.2 MHz
-    ESP_LOGI(TAG, "write_register(dev, SCI_CLOCKF, 6 << 12);");
+    write_register(SCI_CLOCKF, 6 << 12);  // Normal clock settings multiplyer 3.0 = 12.2 MHz
+    ESP_LOGI(TAG, "write_register( SCI_CLOCKF, 6 << 12);");
     // SPI Clock to 4 MHz. Now you can set high speed SPI clock.
     // VS1053_SPI = SPISettings(4000000, MSBFIRST, SPI_MODE0);
 
@@ -140,76 +157,76 @@ void spi_master_init(VS1053_t *dev, int GPIO_SCLK, int GPIO_MOSI, int GPIO_MISO,
     ret = spi_bus_add_device(HSPI_HOST, &devcfg, &hvsspi);
     ESP_LOGD(TAG, "spi_bus_add_device=%d", ret);
     assert(ret == ESP_OK);
-    write_register(dev, SCI_MODE, _BV(SM_SDINEW) | _BV(SM_LINE1));
+    write_register(SCI_MODE, _BV(SM_SDINEW) | _BV(SM_LINE1));
     ESP_LOGI(TAG, "testComm init");
-    testComm(dev, true);
+    testComm(true);
     ESP_LOGI(TAG, "testComm end");
     delay(10);
-    await_data_request(dev);
-    dev->endFillByte = wram_read(dev, 0x1E06) & 0xFF;
-    ESP_LOGI(TAG, "endFillByte=%x", dev->endFillByte);
-    //printDetails(dev, "After last clock setting");
-    dev->chipVersion = getHardwareVersion(dev);
-    ESP_LOGI(TAG, "chipVersion=%x", dev->chipVersion);
+    await_data_request();
+    endFillByte = wram_read(0x1E06) & 0xFF;
+    ESP_LOGI(TAG, "endFillByte=%x", endFillByte);
+    // printDetails( "After last clock setting");
+    chipVersion = getHardwareVersion();
+    ESP_LOGI(TAG, "chipVersion=%x", chipVersion);
     delay(10);
   }
 
-  dev->SPIHandleFast = hvsspi;
+  SPIHandleFast = hvsspi;
 }
 
-void await_data_request(VS1053_t *dev) {
-  while (!gpio_get_level((gpio_num_t)dev->dreq_pin)) {
+void VS1053_t::await_data_request() {
+  while (!gpio_get_level((gpio_num_t)dreq_pin)) {
     taskYIELD();  // Very short delay
   }
 }
 
-bool current_data_request(VS1053_t *dev) {
-  return (gpio_get_level((gpio_num_t)dev->dreq_pin) == HIGH);
+bool VS1053_t::current_data_request() {
+  return (gpio_get_level((gpio_num_t)dreq_pin) == HIGH);
 }
 
-void control_mode_on(VS1053_t *dev) {
-  gpio_set_level((gpio_num_t)dev->dcs_pin, HIGH);  // Bring slave in control mode
-  gpio_set_level((gpio_num_t)dev->cs_pin, LOW);
+void VS1053_t::control_mode_on() {
+  gpio_set_level((gpio_num_t)dcs_pin, HIGH);  // Bring slave in control mode
+  gpio_set_level((gpio_num_t)cs_pin, LOW);
 }
 
-void control_mode_off(VS1053_t *dev) {
-  gpio_set_level((gpio_num_t)dev->cs_pin, HIGH);  // End control mode
+void VS1053_t::control_mode_off() {
+  gpio_set_level((gpio_num_t)cs_pin, HIGH);  // End control mode
 }
 
-void data_mode_on(VS1053_t *dev) {
-  gpio_set_level((gpio_num_t)dev->cs_pin, HIGH);  // Bring slave in data mode
-  gpio_set_level((gpio_num_t)dev->dcs_pin, LOW);
+void VS1053_t::data_mode_on() {
+  gpio_set_level((gpio_num_t)cs_pin, HIGH);  // Bring slave in data mode
+  gpio_set_level((gpio_num_t)dcs_pin, LOW);
 }
 
-void data_mode_off(VS1053_t *dev) {
-  gpio_set_level((gpio_num_t)dev->dcs_pin, HIGH);  // End data mode
+void VS1053_t::data_mode_off() {
+  gpio_set_level((gpio_num_t)dcs_pin, HIGH);  // End data mode
 }
 
-uint16_t read_register(VS1053_t *dev, uint8_t _reg) {
+uint16_t VS1053_t::read_register(uint8_t _reg) {
   spi_transaction_t SPITransaction;
   esp_err_t ret;
 
-  control_mode_on(dev);
-  await_data_request(dev);  // Wait for DREQ to be HIGH
+  control_mode_on();
+  await_data_request();  // Wait for DREQ to be HIGH
   memset(&SPITransaction, 0, sizeof(spi_transaction_t));
   SPITransaction.length = 16;
   SPITransaction.flags |= SPI_TRANS_USE_RXDATA;
   SPITransaction.cmd = VS_READ_COMMAND;
   SPITransaction.addr = _reg;
-  ret = spi_device_transmit(dev->SPIHandleLow, &SPITransaction);
+  ret = spi_device_transmit(SPIHandleLow, &SPITransaction);
   assert(ret == ESP_OK);
   uint16_t result = (((SPITransaction.rx_data[0] & 0xFF) << 8) | ((SPITransaction.rx_data[1]) & 0xFF));
-  await_data_request(dev);  // Wait for DREQ to be HIGH again
-  control_mode_off(dev);
+  await_data_request();  // Wait for DREQ to be HIGH again
+  control_mode_off();
   return result;
 }
 
-bool write_register(VS1053_t *dev, uint8_t _reg, uint16_t _value) {
+bool VS1053_t::write_register(uint8_t _reg, uint16_t _value) {
   spi_transaction_t SPITransaction;
   esp_err_t ret;
 
-  control_mode_on(dev);
-  await_data_request(dev);  // Wait for DREQ to be HIGH
+  control_mode_on();
+  await_data_request();  // Wait for DREQ to be HIGH
   memset(&SPITransaction, 0, sizeof(spi_transaction_t));
   SPITransaction.flags |= SPI_TRANS_USE_TXDATA;
   SPITransaction.cmd = VS_WRITE_COMMAND;
@@ -217,22 +234,22 @@ bool write_register(VS1053_t *dev, uint8_t _reg, uint16_t _value) {
   SPITransaction.tx_data[0] = (_value >> 8) & 0xFF;
   SPITransaction.tx_data[1] = (_value & 0xFF);
   SPITransaction.length = 16;
-  ret = spi_device_transmit(dev->SPIHandleLow, &SPITransaction);
+  ret = spi_device_transmit(SPIHandleLow, &SPITransaction);
   assert(ret == ESP_OK);
-  await_data_request(dev);  // Wait for DREQ to be HIGH again
-  control_mode_off(dev);
+  await_data_request();  // Wait for DREQ to be HIGH again
+  control_mode_off();
   return true;
 }
 
-bool sdi_send_buffer(VS1053_t *dev, uint8_t *data, size_t len) {
+bool VS1053_t::sdi_send_buffer(uint8_t *data, size_t len) {
   size_t chunk_length;  // Length of chunk 32 byte or shorter
   spi_transaction_t SPITransaction;
   esp_err_t ret;
 
-  data_mode_on(dev);
+  data_mode_on();
   while (len)  // More to do?
   {
-    await_data_request(dev);  // Wait for space available
+    await_data_request();  // Wait for space available
     chunk_length = len;
     if (len > VS1053_CHUNK_SIZE) {
       chunk_length = VS1053_CHUNK_SIZE;
@@ -242,25 +259,25 @@ bool sdi_send_buffer(VS1053_t *dev, uint8_t *data, size_t len) {
     memset(&SPITransaction, 0, sizeof(spi_transaction_t));
     SPITransaction.length = chunk_length * 8;
     SPITransaction.tx_buffer = data;
-    ret = spi_device_transmit(dev->SPIHandleFast, &SPITransaction);
+    ret = spi_device_transmit(SPIHandleFast, &SPITransaction);
     assert(ret == ESP_OK);
     data += chunk_length;
   }
-  data_mode_off(dev);
+  data_mode_off();
   return true;
 }
 
-bool sdi_send_fillers(VS1053_t *dev, size_t len) {
+bool VS1053_t::sdi_send_fillers(size_t len) {
   size_t chunk_length;  // Length of chunk 32 byte or shorter
   spi_transaction_t SPITransaction;
   esp_err_t ret;
   uint8_t data[VS1053_CHUNK_SIZE];
-  for (int i = 0; i < VS1053_CHUNK_SIZE; i++) data[i] = dev->endFillByte;
+  for (int i = 0; i < VS1053_CHUNK_SIZE; i++) data[i] = endFillByte;
 
-  data_mode_on(dev);
+  data_mode_on();
   while (len)  // More to do?
   {
-    await_data_request(dev);  // Wait for space available
+    await_data_request();  // Wait for space available
     chunk_length = len;
     if (len > VS1053_CHUNK_SIZE) {
       chunk_length = VS1053_CHUNK_SIZE;
@@ -270,26 +287,26 @@ bool sdi_send_fillers(VS1053_t *dev, size_t len) {
     memset(&SPITransaction, 0, sizeof(spi_transaction_t));
     SPITransaction.length = chunk_length * 8;
     SPITransaction.tx_buffer = data;
-    ret = spi_device_transmit(dev->SPIHandleFast, &SPITransaction);
+    ret = spi_device_transmit(SPIHandleFast, &SPITransaction);
     assert(ret == ESP_OK);
   }
-  data_mode_off(dev);
+  data_mode_off();
   return true;
 }
 
-void wram_write(VS1053_t *dev, uint16_t address, uint16_t data) {
-  write_register(dev, SCI_WRAMADDR, address);
-  write_register(dev, SCI_WRAM, data);
+void VS1053_t::wram_write(uint16_t address, uint16_t data) {
+  write_register(SCI_WRAMADDR, address);
+  write_register(SCI_WRAM, data);
 }
 
-uint16_t wram_read(VS1053_t *dev, uint16_t address) {
-  write_register(dev, SCI_WRAMADDR, address);  // Start reading from WRAM
-  // uint16_t wk = read_register(dev, SCI_WRAM);		// Read back result
+uint16_t VS1053_t::wram_read(uint16_t address) {
+  write_register(SCI_WRAMADDR, address);  // Start reading from WRAM
+  // uint16_t wk = read_register( SCI_WRAM);		// Read back result
   // ESP_LOGI(TAG, "SCI_WRAM=%x", wk);
-  return read_register(dev, SCI_WRAM);  // Read back result
+  return read_register(SCI_WRAM);  // Read back result
 }
 
-bool testComm(VS1053_t *dev, bool fast) {
+bool VS1053_t::testComm(bool fast) {
   // Test the communication with the VS1053 module.  The result wille be returned.
   // If DREQ is low, there is problably no VS1053 connected.	Pull the line true
   // in order to prevent an endless loop waiting for this signal.  The rest of the
@@ -298,7 +315,7 @@ bool testComm(VS1053_t *dev, bool fast) {
   uint16_t r1, cnt = 0;
   uint16_t delta = 300;  // 3 for fast SPI
 
-  if (!gpio_get_level((gpio_num_t)dev->dreq_pin)) {
+  if (!gpio_get_level((gpio_num_t)dreq_pin)) {
     ESP_LOGW(TAG, "VS1053 not properly installed!");
     // Allow testing without the VS1053 module
     // pinMode(dreq_pin, INPUT_PULLUP); // DREQ is now input with pull-up
@@ -313,9 +330,9 @@ bool testComm(VS1053_t *dev, bool fast) {
   }
 
   for (i = 0; (i < 0xFFFF) && (cnt < 20); i += delta) {
-    write_register(dev, SCI_VOL, i);     // Write data to SCI_VOL
-    r1 = read_register(dev, SCI_VOL);    // Read back for the first time
-    if (i != r1)  // Check for 2 equal reads
+    write_register(SCI_VOL, i);   // Write data to SCI_VOL
+    r1 = read_register(SCI_VOL);  // Read back for the first time
+    if (i != r1)                  // Check for 2 equal reads
     {
       ESP_LOGW(TAG, "VS1053 error retry SB:%04X R1:%04X", i, r1);
       cnt++;
@@ -372,18 +389,18 @@ long map(long x, long in_min, long in_max, long out_min, long out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-void setVolume(VS1053_t *dev, uint8_t vol) {
+void VS1053_t::setVolume(uint8_t vol) {
   // Set volume.	Both left and right.
   // Input value is 0..100.  100 is the loudest.
   uint16_t value;  // Value to send to SCI_VOL
 
-  dev->curvol = vol;                     // Save for later use
+  curvol = vol;                          // Save for later use
   value = map(vol, 0, 100, 0xFF, 0x00);  // 0..100% to one channel
   value = (value << 8) | value;
-  write_register(dev, SCI_VOL, value);  // Volume left and right
+  write_register(SCI_VOL, value);  // Volume left and right
 }
 
-void setTone(VS1053_t *dev, uint8_t *rtone) {  // Set bass/treble (4 nibbles)
+void VS1053_t::setTone(uint8_t *rtone) {  // Set bass/treble (4 nibbles)
   // Set tone characteristics.  See documentation for the 4 nibbles.
   uint16_t value = 0;  // Value to send to SCI_BASS
   int i;               // Loop control
@@ -391,49 +408,49 @@ void setTone(VS1053_t *dev, uint8_t *rtone) {  // Set bass/treble (4 nibbles)
   for (i = 0; i < 4; i++) {
     value = (value << 4) | rtone[i];  // Shift next nibble in
   }
-  write_register(dev, SCI_BASS, value);  // Volume left and right
+  write_register(SCI_BASS, value);  // Volume left and right
 }
 
-uint8_t getVolume(VS1053_t *dev) {  // Get the currenet volume setting.
-  return dev->curvol;
+uint8_t VS1053_t::getVolume() {  // Get the currenet volume setting.
+  return curvol;
 }
 
-void startSong(VS1053_t *dev) {
-  sdi_send_fillers(dev, 10);
+void VS1053_t::startSong() {
+  sdi_send_fillers(10);
 }
 
-void playChunk(VS1053_t *dev, uint8_t *data, size_t len) {
-  sdi_send_buffer(dev, data, len);
+void VS1053_t::playChunk(uint8_t *data, size_t len) {
+  sdi_send_buffer(data, len);
 }
 
-void stopSong(VS1053_t *dev) {
+void VS1053_t::stopSong() {
   uint16_t modereg;  // Read from mode register
   int i;             // Loop control
 
-  sdi_send_fillers(dev, 2052);
+  sdi_send_fillers(2052);
   delay(10);
-  write_register(dev, SCI_MODE, _BV(SM_SDINEW) | _BV(SM_CANCEL));
+  write_register(SCI_MODE, _BV(SM_SDINEW) | _BV(SM_CANCEL));
   for (i = 0; i < 200; i++) {
-    sdi_send_fillers(dev, 32);
-    modereg = read_register(dev, SCI_MODE);  // Read status
+    sdi_send_fillers(32);
+    modereg = read_register(SCI_MODE);  // Read status
     if ((modereg & _BV(SM_CANCEL)) == 0) {
-      sdi_send_fillers(dev, 2052);
+      sdi_send_fillers(2052);
       ESP_LOGI(TAG, "Song stopped correctly after %d msec", i * 10);
       return;
     }
     delay(10);
   }
-  //printDetails(dev, "Song stopped incorrectly!");
+  // printDetails( "Song stopped incorrectly!");
 }
 
-void softReset(VS1053_t *dev) {
+void VS1053_t::softReset() {
   ESP_LOGI(TAG, "Performing soft-reset");
-  write_register(dev, SCI_MODE, _BV(SM_SDINEW) | _BV(SM_RESET));
+  write_register(SCI_MODE, _BV(SM_SDINEW) | _BV(SM_RESET));
   delay(10);
-  await_data_request(dev);
+  await_data_request();
 }
 
-// void printDetails(VS1053_t *dev, char *header) {
+// void printDetails(char *header) {
 //   uint16_t regbuf[SCI_num_registers];
 //   uint8_t i;
 
@@ -441,13 +458,13 @@ void softReset(VS1053_t *dev) {
 //   ESP_LOGI(TAG, "REG	 Contents");
 //   ESP_LOGI(TAG, "---	 -----");
 //   for (i = 0; i <= SCI_num_registers; i++) {
-//     regbuf[i] = read_register(dev, i);
+//     regbuf[i] = read_register( i);
 //     delay(5);
 //     ESP_LOGI(TAG, "%3X - %5X", i, regbuf[i]);
 //   }
 // #if 0
 // 	for (i = 0; i <= SCI_num_registers; i++) {
-// 		regbuf[i] = read_register(dev, i);
+// 		regbuf[i] = read_register( i);
 // 	}
 // 	for (i = 0; i <= SCI_num_registers; i++) {
 // 		delay(5);
@@ -464,12 +481,12 @@ void softReset(VS1053_t *dev) {
  *
  * Read more here: http://www.bajdi.com/lcsoft-vs1053-mp3-module/#comment-33773
  */
-void switchToMp3Mode(VS1053_t *dev) {
-  wram_write(dev, 0xC017, 3);  // GPIO DDR = 3
-  wram_write(dev, 0xC019, 0);  // GPIO ODATA = 0
+void VS1053_t::switchToMp3Mode() {
+  wram_write(0xC017, 3);  // GPIO DDR = 3
+  wram_write(0xC019, 0);  // GPIO ODATA = 0
   delay(100);
   ESP_LOGI(TAG, "Switched to mp3 mode");
-  softReset(dev);
+  softReset();
 }
 
 /**
@@ -477,8 +494,8 @@ void switchToMp3Mode(VS1053_t *dev) {
  *
  * @return true if the chip is wired up correctly
  */
-bool isChipConnected(VS1053_t *dev) {
-  uint16_t status = read_register(dev, SCI_STATUS);
+bool VS1053_t::isChipConnected() {
+  uint16_t status = read_register(SCI_STATUS);
 
   return !(status == 0 || status == 0xFFFF);
 }
@@ -503,8 +520,8 @@ bool isChipConnected(VS1053_t *dev) {
  *
  * @return current decoded time in full seconds
  */
-uint16_t getDecodedTime(VS1053_t *dev) {
-  return read_register(dev, SCI_DECODE_TIME);
+uint16_t VS1053_t::getDecodedTime() {
+  return read_register(SCI_DECODE_TIME);
 }
 
 /**
@@ -515,13 +532,13 @@ uint16_t getDecodedTime(VS1053_t *dev) {
  * overwritten by the firmware. A write to SCI_DECODE_TIME also resets the
  * byteRate calculation.
  */
-void clearDecodedTime(VS1053_t *dev) {
-  write_register(dev, SCI_DECODE_TIME, 0x00);
-  write_register(dev, SCI_DECODE_TIME, 0x00);
+void VS1053_t::clearDecodedTime() {
+  write_register(SCI_DECODE_TIME, 0x00);
+  write_register(SCI_DECODE_TIME, 0x00);
 }
 
-uint8_t getHardwareVersion(VS1053_t *dev) {
-  uint16_t status = read_register(dev, SCI_STATUS);
+uint8_t VS1053_t::getHardwareVersion() {
+  uint16_t status = read_register(SCI_STATUS);
 
   return (status >> 4) & 0xf;
 }

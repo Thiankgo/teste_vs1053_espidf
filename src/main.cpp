@@ -25,7 +25,7 @@ void print(const char *message) {
   printf("%s", message);
 }
 
-VS1053_t dev;
+VS1053_t *_audio = new VS1053_t(AUDIO_CLK,AUDIO_MOSI,AUDIO_MISO,AUDIO_CS,AUDIO_DC, DREQ, AUDIO_RESET);
 
 extern "C" {
 void app_main(void);
@@ -56,9 +56,9 @@ void app_main() {
   vTaskDelay(pdMS_TO_TICKS(20));
   gpio_set_level(GPIO_NUM_45, 0);
 
-  spi_master_init(&dev, AUDIO_CLK, AUDIO_MOSI, AUDIO_MISO, AUDIO_CS, AUDIO_DC, DREQ, AUDIO_RESET);
-  switchToMp3Mode(&dev);
-  setVolume(&dev, 80);
+  _audio->begin();
+  _audio->switchToMp3Mode();
+  _audio->setVolume(80);
 
 
   gpio_set_level(GPIO_NUM_45, 1);
@@ -66,7 +66,7 @@ void app_main() {
   gpio_set_level(GPIO_NUM_45, 0);
 
   while (1) {
-    playChunk(&dev, (uint8_t *)casa_mp3, casa_mp3_len);
+		_audio->playChunk((uint8_t *)casa_mp3, casa_mp3_len);
 
     vTaskDelay(pdMS_TO_TICKS(10));
   }
