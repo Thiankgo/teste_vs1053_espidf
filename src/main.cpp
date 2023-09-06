@@ -1,5 +1,4 @@
 #include <stdio.h>
-
 #include <string>
 
 #include "driver/gpio.h"
@@ -18,42 +17,12 @@
 #define AUDIO_RESET (gpio_num_t)42
 #define DREQ (gpio_num_t)39
 
-#define RX_PIN 43  // Replace with your desired RX pin number
-#define TX_PIN 44  // Replace with your desired TX pin number
-
 void println(const char *message) {
   printf("%s\n", message);
 }
 
 void print(const char *message) {
   printf("%s", message);
-}
-
-void printHex(std::string pacote) {
-  for (uint8_t k = 0; k < pacote.length(); k++) {
-    printf("%02X ", pacote[k]);
-  }
-  println("");
-}
-
-int timedRead() {
-  int c;
-  uint32_t startMillis = esp_log_timestamp();
-
-  do {
-    uart_read_bytes(UART_NUM_1, (uint8_t *)&c, 1, pdMS_TO_TICKS(50));
-    if (c >= 0) return c;
-    vTaskDelay(1);
-  } while ((esp_log_timestamp() - startMillis) < 50);
-
-  return -1;
-}
-
-bool serialAvailable() {
-  size_t uart_fifo_len;
-  uart_get_buffered_data_len(UART_NUM_1, &uart_fifo_len);
-
-  return (uart_fifo_len > 0);
 }
 
 VS1053_t dev;
